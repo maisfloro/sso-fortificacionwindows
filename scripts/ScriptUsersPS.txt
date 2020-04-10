@@ -1,0 +1,65 @@
+# MAESTRIA EN SEGURIDAD INFORMATICA
+# Seguridad en Sistemas Operativos
+# Actividad Grupal - Fortificación de un Entorno de Windows
+# Integrantes: Maria Isabel Florez Rodriguez
+#              Victor Jose Barrero Melo
+#              Jefferson Palacios
+# Objetivo:    Creación masiva de usuarios en el Directorio Activo (DA) en el Sistema Operativo Windows Server 2012 R2, utilizando PowerShell
+# Webgrafía:   https://docs.microsoft.com/en-us/powershell/module/addsadministration/add-adgroupmember?view=win10-ps
+#              https://activedirectorypro.com/create-bulk-users-active-directory/
+
+# Función que permite importar los usuarios al Directorio Activo
+Import-Module activedirectory
+
+#Almacenar los datos del archivo Users_DA.csv en la variable $filecsv
+$filecsv = Import-csv C:\ScriptPS\Users_DA.csv
+ 
+#Asignar un DNS (Servidor de Dominio)
+$dns = '@' + (Get-ADDomain).dnsroot
+
+#Esta variable se usa para la asignación de las UO (Unidades Organizacionales)
+$dominio = "DC=SSO,DC=com" 
+
+#Recorrer cada usuario que se encuentra en el archivo CSV 
+foreach ($User in $filecsv)
+{
+  #Leer cada campo y asignarlo a una variable
+  $usuario  = $User.usuario
+  $nombre   = $User.nombre
+  $apellido = $User.apellido
+  $ou       = $User.ou 
+  $empresa  = $User.empresa
+  $grupo    = $User.grupo
+  $password = (ConvertTo-SecureString $User.password -AsPlainText -force)
+  $rutaUser = ($ou + "," + $dominio)
+
+  #Verificar si el usuario ya existe en el DA (Directorio Activo)
+  if (Get-ADUser -F {SamAccountName -eq $usuario})
+  {
+  	#Si el usuario existe, se mostrará una alaerta 
+	Write-Warning "La cuenta de usuario: $usuario ya existe en el Directorio Activo."
+  }
+  else
+  {
+  	#Si el usuario no existe entonces se crea el usuarip que se leyó en el archivo CSV 
+    New-ADUser `
+    -SamAccountName        $usuario `
+    -UserPrincipalName     $usuario `
+    -Name                  ($nombre + " " + $apellido) `
+    -GivenName             $nombre `
+    -Surname               $apellido `
+    -Enabled               $true `
+    -DisplayName           ($nombre + " " + $apellido) `
+    -Path                  $rutaUser `
+    -AccountPassword       $password `
+    -Company               $empresa `
+    -ChangePasswordAtLogon $true
+    
+    Write-Warning "Se creó la cuenta de usuario: $usuario en el Directorio Activo."
+    
+    #Añadir cada usuario al grupo correspondiente (Dirección, RRHH, ingeniería)
+    $rutaGrupo = ("CN=" + $grupo + "," + $rutaUser)
+    Add-ADGroupMember -Identity $rutaGrupo -Members $usuario
+    Write-Warning "Se añadió al grupo: $rutaGrupo el usuario: $usuario"
+  }
+}
